@@ -1,0 +1,20 @@
+{
+  "name": "price-alert-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "An app for fetching assets' prices in real time",
+  "main": "src/index.js",
+  "scripts": {
+    "prettier": "./node_modules/.bin/prettier --write \"**/*.{js,json,md}\""
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "1.2.0",
+    "dotenv": "^16.0.3",
+    "eslint": "^8.30.0",
+    "ethers": "^5.7.2",
+    "lodash": "^4.17.21",
+    "prettier": "^2.8.1"
+  }
+}

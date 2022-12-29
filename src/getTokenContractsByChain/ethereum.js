@@ -159,6 +159,4 @@ const getTokenContracts = async () => {
   }
 };
 
-getTokenContracts();
-
 export default getTokenContracts;

@@ -4,10 +4,18 @@ import { dirname } from "path";
 import { ethers } from "ethers";
 import { bootstrap } from "global-agent";
 
-import getTokenContracts from "./getTokenContractsByChain/ethereum.js";
-import { RPC_API_KEY, HTTPS_PROVIDER_URL, WSS_PROVIDER_URL, GLOBAL_AGENT_HTTP_PROXY } from "./init.js";
+// import getTokenContracts from "./getTokenContractsByChain/ethereum.js";
+import {
+  RPC_API_KEY,
+  HTTPS_PROVIDER_URL,
+  WSS_PROVIDER_URL,
+  GLOBAL_AGENT_HTTP_PROXY,
+  DISCORD_API_KEY,
+  DISCORD_CHANNEL_ID,
+} from "./init.js";
 import wait from "./utils/wait.js";
 import Store from "./store/index.js";
+import Discord from "./discord/index.js";
 import UniV2Contract from "./contracts/uniV2/index.js";
 
 if (GLOBAL_AGENT_HTTP_PROXY) {
@@ -24,9 +32,10 @@ const httpsProvider = new ethers.providers.JsonRpcProvider(`${HTTPS_PROVIDER_URL
 const blockRequestMap = {};
 
 const store = new Store();
-
-getTokenContracts();
-
+const discord = new Discord({ token: DISCORD_API_KEY, channelId: DISCORD_CHANNEL_ID });
+//
+// getTokenContracts();
+//
 const doFetchBlockLogs = async (blockNumber) => {
   try {
     await wait(3000);
@@ -47,7 +56,7 @@ wssProvider.on("block", async (blockNumber) => {
     logs.forEach(({ address, data, topics }) => {
       const [eventSignature] = topics;
       if (UniV2Contract.events.Swap.hash === eventSignature && ethPoolsArray.includes(address.toLowerCase())) {
-        new UniV2Contract({ httpsProvider, address, data, topics, event: UniV2Contract.events.Swap, store });
+        new UniV2Contract({ httpsProvider, discord, address, data, topics, event: UniV2Contract.events.Swap, store });
       }
     });
   }

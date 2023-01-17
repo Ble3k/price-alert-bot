@@ -21,11 +21,13 @@ class UniV2Contract {
 
   #httpsProvider;
   #address;
+  #discord;
   #eventsDecoded = {};
 
-  constructor({ httpsProvider, address, data, topics, event, store }) {
+  constructor({ httpsProvider, discord, address, data, topics, event, store }) {
     this.#address = address;
     this.#httpsProvider = httpsProvider;
+    this.#discord = discord;
 
     try {
       this.#eventsDecoded[event.name] = decodeEventValues({ event, data, topics });
@@ -69,19 +71,23 @@ class UniV2Contract {
 
         const baseAmount = new Big(ethers.utils.formatUnits(reserve0, baseDecimal));
         const quoteAmount = new Big(ethers.utils.formatUnits(reserve1, quoteDecimal));
-
         const currentPrice = quoteAmount.div(baseAmount);
 
-        inspect(`${baseSymbol}/${quoteSymbol} price changed in pool ${this.#address} on ${percentageChanged}%.`);
-        inspect(`Current price: ${currentPrice.toFixed(quoteDecimal)} ${quoteSymbol}.`);
-
         const morePools = ethPools[baseAddress.toLowerCase()].filter((a) => a !== this.#address.toLowerCase());
+        let poolsMessagePart = `${baseSymbol} is trading only in 1 pool`;
 
         if (morePools.length !== 0) {
-          inspect(`${baseSymbol} is also trading in ${morePools}`);
-        } else {
-          inspect(`${baseSymbol} is trading only in 1 pool`);
+          const poolsString = morePools.reduce((memo, curr) => (memo ? `${memo}\n*${curr}*` : `*${curr}*`), "");
+          poolsMessagePart = `${baseSymbol} is also trading in:\n\n${poolsString}`;
         }
+
+        const message = `**${baseSymbol}/${quoteSymbol}**\n\nPrice changed in pool ${
+          this.#address
+        } on ***${percentageChanged}%*** for the last 10 minutes.\nCurrent price: ***${currentPrice.toFixed(
+          quoteDecimal
+        )} ${quoteSymbol}***.\n${poolsMessagePart}`;
+
+        this.#discord.notify(message);
       } catch (e) {
         inspect(`Failed to notify on ${this.#address}, trying again...`);
         await wait(3000);

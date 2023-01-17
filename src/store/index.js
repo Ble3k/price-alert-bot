@@ -25,7 +25,7 @@ class Store {
       const quotePercentChanged = calcPercentChanged(prevAmount.quote, value.quote);
       const pricePercentChanged = (Math.abs(basePercentChanged) + Math.abs(quotePercentChanged)).toFixed(5);
 
-      if (+pricePercentChanged !== 10) valueDiffs.push(pricePercentChanged);
+      if (+pricePercentChanged !== 0) valueDiffs.push(pricePercentChanged);
     }
 
     const maxPercentageBetweenSwaps = Math.max(...valueDiffs);
@@ -33,7 +33,7 @@ class Store {
     inspect(valueDiffs);
     inspect("-----------------------------------------------------------");
 
-    if (maxPercentageBetweenSwaps >= 1) {
+    if (maxPercentageBetweenSwaps >= 10) {
       this.prices[address] = undefined;
       notifyCallback(maxPercentageBetweenSwaps);
     }

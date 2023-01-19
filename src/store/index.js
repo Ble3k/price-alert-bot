@@ -12,7 +12,7 @@ const percentageChangeByMCap = (address) => {
   const ethPools = JSON.parse(
     fs.readFileSync(path.join(__dirname, "..", "getTokenContractsByChain", "ethPools.json"), "utf8")
   );
-  const { marketCap } = ethPools[address];
+  const marketCap = ethPools[address]?.marketCap; // in case we found a quote token, base of which is not in the list
 
   if (marketCap <= MARKET_CAP_PRICE_CHANGE_TRIGGER.LOW.MCAP) {
     return MARKET_CAP_PRICE_CHANGE_TRIGGER.LOW.PERCENT;

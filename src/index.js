@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { ethers } from "ethers";
 import { bootstrap } from "global-agent";
 
-// import getTokenContracts from "./getTokenContractsByChain/ethereum.js";
+import getTokenContracts from "./getTokenContractsByChain/ethereum.js";
 import {
   RPC_API_KEY,
   HTTPS_PROVIDER_URL,
@@ -14,6 +14,7 @@ import {
   DISCORD_CHANNEL_ID,
 } from "./init.js";
 import wait from "./utils/wait.js";
+import { FETCH_POOLS_PER_TIME, WAIT_PER_REQUEST_TIME } from "./config.js";
 import Store from "./store/index.js";
 import Discord from "./discord/index.js";
 import UniV2Contract from "./contracts/uniV2/index.js";
@@ -24,6 +25,8 @@ if (GLOBAL_AGENT_HTTP_PROXY) {
 
 const date = new Date();
 inspect(date.toString());
+// getTokenContracts();
+setInterval(getTokenContracts, FETCH_POOLS_PER_TIME);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -33,16 +36,14 @@ const blockRequestMap = {};
 
 const store = new Store();
 const discord = new Discord({ token: DISCORD_API_KEY, channelId: DISCORD_CHANNEL_ID });
-//
-// getTokenContracts();
-//
+
 const doFetchBlockLogs = async (blockNumber) => {
   try {
-    await wait(3000);
+    await wait(WAIT_PER_REQUEST_TIME);
     return await wssProvider.getLogs({ fromBlock: blockNumber });
   } catch (e) {
     console.log(`Failed on Block #${blockNumber}, trying again...`);
-    await wait(3000);
+    await wait(WAIT_PER_REQUEST_TIME);
     return await doFetchBlockLogs(blockNumber);
   }
 };
@@ -52,7 +53,7 @@ wssProvider.on("block", async (blockNumber) => {
     blockRequestMap[blockNumber] = true;
     const logs = await doFetchBlockLogs(blockNumber);
     const ethPools = JSON.parse(fs.readFileSync(__dirname + "/getTokenContractsByChain/ethPools.json", "utf8"));
-    const ethPoolsArray = Object.values(ethPools).flat();
+    const ethPoolsArray = Object.values(ethPools).flatMap((item) => item.pools.map((p) => p.address));
     logs.forEach(({ address, data, topics }) => {
       const [eventSignature] = topics;
       if (UniV2Contract.events.Swap.hash === eventSignature && ethPoolsArray.includes(address.toLowerCase())) {

@@ -1,6 +1,7 @@
 import { Client } from "discord.js";
 
 import wait from "../utils/wait.js";
+import { WAIT_PER_REQUEST_TIME } from "../config.js";
 
 class Discord {
   #client;
@@ -26,7 +27,7 @@ class Discord {
     } catch (e) {
       inspect(e);
       inspect("Failed to login in discord or fetch a channel, trying again...");
-      await wait(3000);
+      await wait(WAIT_PER_REQUEST_TIME);
       await this.init();
     }
   };
@@ -39,7 +40,7 @@ class Discord {
 
       await this.#channel.send(message);
     } catch (e) {
-      await wait(3000);
+      await wait(WAIT_PER_REQUEST_TIME);
       return await this.notify(message);
     }
   };

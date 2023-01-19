@@ -10,10 +10,10 @@ import uniV2ABI from "./ABI.js";
 import ERC20Contract from "../erc20/index.js";
 import { extractEventsWithHashes, decodeEventValues } from "../../utils/contract.js";
 import wait from "../../utils/wait.js";
+import { WAIT_PER_REQUEST_TIME } from "../../config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const notifyRequestMap = {};
 
 class UniV2Contract {
   static ABI = uniV2ABI;
@@ -23,9 +23,10 @@ class UniV2Contract {
   #address;
   #discord;
   #eventsDecoded = {};
+  #notifyRequestMap = {};
 
   constructor({ httpsProvider, discord, address, data, topics, event, store }) {
-    this.#address = address;
+    this.#address = address.toLowerCase();
     this.#httpsProvider = httpsProvider;
     this.#discord = discord;
 
@@ -39,82 +40,98 @@ class UniV2Contract {
   }
 
   checkReserves = async ({ eventName, store }) => {
-    const contract = new ethers.Contract(this.#address, UniV2Contract.ABI, this.#httpsProvider);
-    const [reserve0, reserve1] = await contract.getReserves();
+    try {
+      const contract = new ethers.Contract(this.#address, UniV2Contract.ABI, this.#httpsProvider);
+      const [reserve0, reserve1] = await contract.getReserves();
+      const baseAddress = await contract.token0();
 
-    const { inputs } = this.#eventsDecoded[eventName];
-    const eventValues = inputs.reduce((memo, curr) => ({ ...memo, [curr.name]: curr.value }), {});
-    const { amount0In, amount0Out, amount1In, amount1Out } = eventValues;
+      const { inputs } = this.#eventsDecoded[eventName];
+      const eventValues = inputs.reduce((memo, curr) => ({ ...memo, [curr.name]: curr.value }), {});
+      const { amount0In, amount0Out, amount1In, amount1Out } = eventValues;
 
-    const baseAmount = {
-      current: reserve0.toString(),
-      prev: reserve0.add(amount0In).sub(amount0Out).toString(),
-    };
-    const quoteAmount = {
-      current: reserve1.toString(),
-      prev: reserve1.add(amount1In).sub(amount1Out).toString(),
-    };
+      const baseAmount = {
+        current: reserve0.toString(),
+        prev: reserve0.add(amount0In).sub(amount0Out).toString(),
+      };
+      const quoteAmount = {
+        current: reserve1.toString(),
+        prev: reserve1.add(amount1In).sub(amount1Out).toString(),
+      };
 
-    const doNotify = async (percentageChanged) => {
-      try {
-        const ethPools = JSON.parse(
-          fs.readFileSync(path.join(__dirname, "../..", "getTokenContractsByChain", "ethPools.json"), "utf8")
-        );
-        const baseAddress = await contract.token0();
-        const baseContract = new ERC20Contract({ httpsProvider: this.#httpsProvider, address: baseAddress });
-        await baseContract.getTokenInfo();
-        const { symbol: baseSymbol, decimals: baseDecimal } = baseContract;
-        const quoteAddress = await contract.token1();
-        const quoteContract = new ERC20Contract({ httpsProvider: this.#httpsProvider, address: quoteAddress });
-        await quoteContract.getTokenInfo();
-        const { symbol: quoteSymbol, decimals: quoteDecimal } = quoteContract;
+      const doNotify = async (percentageChanged) => {
+        try {
+          const ethPools = JSON.parse(
+            fs.readFileSync(path.join(__dirname, "../..", "getTokenContractsByChain", "ethPools.json"), "utf8")
+          );
 
-        const baseAmount = new Big(ethers.utils.formatUnits(reserve0, baseDecimal));
-        const quoteAmount = new Big(ethers.utils.formatUnits(reserve1, quoteDecimal));
-        const currentPrice = quoteAmount.div(baseAmount);
+          const baseContract = new ERC20Contract({ httpsProvider: this.#httpsProvider, address: baseAddress });
+          await baseContract.getTokenInfo();
+          const { symbol: baseSymbol, decimals: baseDecimal } = baseContract;
+          const quoteAddress = await contract.token1();
+          const quoteContract = new ERC20Contract({ httpsProvider: this.#httpsProvider, address: quoteAddress });
+          await quoteContract.getTokenInfo();
+          const { symbol: quoteSymbol, decimals: quoteDecimal } = quoteContract;
 
-        const morePools = ethPools[baseAddress.toLowerCase()].filter((a) => a !== this.#address.toLowerCase());
-        let poolsMessagePart = `${baseSymbol} is trading only in 1 pool`;
+          const baseAmount = new Big(ethers.utils.formatUnits(reserve0, baseDecimal));
+          const quoteAmount = new Big(ethers.utils.formatUnits(reserve1, quoteDecimal));
+          const currentPrice = quoteAmount.div(baseAmount);
+          const isWETHBase = baseAddress.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+          const baseMarkets = ethPools[isWETHBase ? quoteAddress.toLowerCase() : baseAddress.toLowerCase()];
 
-        if (morePools.length !== 0) {
-          const poolsString = morePools.reduce((memo, curr) => (memo ? `${memo}\n*${curr}*` : `*${curr}*`), "");
-          poolsMessagePart = `${baseSymbol} is also trading in:\n\n${poolsString}`;
+          const currentPool = baseMarkets.pools.find((p) => p.address === this.#address);
+          const morePools = baseMarkets.pools.filter((p) => p.address !== this.#address);
+          let poolsMessagePart = `${isWETHBase ? quoteSymbol : baseSymbol} is trading only in 1 pool`;
+
+          if (morePools.length !== 0) {
+            const poolsString = morePools.reduce((memo, curr) => {
+              const { address, dex, tokens } = curr;
+              const [base, quote] = tokens;
+              const message = `${base}/${quote} - *${address}* - ${dex}`;
+
+              return memo ? `${memo}\n${message}` : `${message}`;
+            }, "");
+            poolsMessagePart = `${isWETHBase ? quoteSymbol : baseSymbol} is also trading in:\n\n${poolsString}`;
+          }
+
+          const message = `**${baseSymbol}/${quoteSymbol}**\n\nPrice changed in pool ${this.#address} (${
+            currentPool.dex
+          }) on ***${percentageChanged}%*** for the last 10 minutes.\nCurrent price: ***${currentPrice.toFixed(
+            quoteDecimal
+          )} ${quoteSymbol}***.\n${poolsMessagePart}\n\n=============================================================`;
+
+          this.#discord.notify(message);
+        } catch (e) {
+          inspect(`Failed to notify on ${this.#address}, trying again...`);
+          await wait(WAIT_PER_REQUEST_TIME);
+          return await doNotify(percentageChanged);
         }
+      };
 
-        const message = `**${baseSymbol}/${quoteSymbol}**\n\nPrice changed in pool ${
-          this.#address
-        } on ***${percentageChanged}%*** for the last 10 minutes.\nCurrent price: ***${currentPrice.toFixed(
-          quoteDecimal
-        )} ${quoteSymbol}***.\n${poolsMessagePart}`;
+      const notify = async (percentageChanged) => {
+        if (!this.#notifyRequestMap[this.#address]) {
+          this.#notifyRequestMap[this.#address] = true;
+          await doNotify(percentageChanged);
+          this.#notifyRequestMap[this.#address] = false;
+        }
+      };
 
-        this.#discord.notify(message);
-      } catch (e) {
-        inspect(`Failed to notify on ${this.#address}, trying again...`);
-        await wait(3000);
-        return await doNotify(percentageChanged);
-      }
-    };
-
-    const notify = async (percentageChanged) => {
-      const notifyRequestKey = `${this.#address}_${percentageChanged}`;
-      if (!notifyRequestMap[notifyRequestKey]) {
-        notifyRequestMap[notifyRequestKey] = true;
-        await doNotify(percentageChanged);
-      }
-    };
-
-    store.set({
-      address: this.#address,
-      value: {
-        base: baseAmount.current,
-        quote: quoteAmount.current,
-      },
-      prevValue: {
-        base: baseAmount.prev,
-        quote: quoteAmount.prev,
-      },
-      notifyCallback: notify,
-    });
+      inspect(`${eventName} - ${this.#address}`);
+      store.set({
+        address: this.#address,
+        baseAddress: baseAddress.toLowerCase(),
+        value: {
+          base: baseAmount.current,
+          quote: quoteAmount.current,
+        },
+        prevValue: {
+          base: baseAmount.prev,
+          quote: quoteAmount.prev,
+        },
+        notifyCallback: notify,
+      });
+    } catch (e) {
+      inspect(e);
+    }
   };
 }
 

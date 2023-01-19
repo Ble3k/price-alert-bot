@@ -4,52 +4,48 @@ import { dirname } from "path";
 import lodash from "lodash";
 
 import chunkFetcher from "../utils/chunkFetcher.js";
+import {
+  REQUEST_TRY_AGAIN_TIME,
+  MIN_COIN_MARKET_CAP,
+  MIN_LIQUIDITY_IN_POOL,
+  ETH_ADDRESS_MAX_LENGTH,
+} from "../config.js";
 
 import coinGeckoAPI from "../web2API/coingecko.js";
 import geckoTerminalAPI from "../web2API/geckoTerminal.js";
 import dexScreenerAPI from "../web2API/dexScreener.js";
 
-const { chunk, uniq } = lodash;
+const { chunk, uniqBy } = lodash;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const minCoinMarketCapValue = 500000;
-const minLiquidityInPool = 100000;
-const ethAddressMaxLength = 42;
-const waitTimeMS = 1000 * 60 + 1000; // plus one more second, to be sure
 
-const coinConditionCheck = (coin) => {
+const calculateMarketCap = (coin) => {
   const { current_price, market_cap, fully_diluted_valuation, circulating_supply, total_supply, max_supply } = coin;
 
   if (market_cap) {
-    return market_cap > minCoinMarketCapValue;
+    return market_cap;
   }
 
   if (current_price && circulating_supply) {
-    const currentMCapManuallyCalculated = current_price * circulating_supply;
-    return currentMCapManuallyCalculated > minCoinMarketCapValue;
+    return current_price * circulating_supply;
   }
 
   if (fully_diluted_valuation) {
-    return fully_diluted_valuation > minCoinMarketCapValue;
+    return fully_diluted_valuation;
   }
 
   if (current_price && (total_supply || max_supply)) {
-    const currentFDVManuallyCalculated = current_price * (total_supply || max_supply);
-    return currentFDVManuallyCalculated > minCoinMarketCapValue;
+    return current_price * (total_supply || max_supply);
   }
 
   return false;
 };
 
-// const allCoins = JSON.parse(fs.readFileSync(__dirname + "/allCoins.json", "utf8"));
-// const ethMarkets = JSON.parse(fs.readFileSync(__dirname + "/ethMarketsStatic.json", "utf8"));
-
 const getTokenContracts = async () => {
   try {
     console.log("Loading all coins...");
     const { data: allCoins } = await coinGeckoAPI.getCoins({ include_platform: true });
-    fs.writeFile(__dirname + "/allCoins.json", JSON.stringify(allCoins), "utf8", () => {});
 
     console.log("All coins loaded. Processing data...");
     const ethereumCoinIds = allCoins.reduce(
@@ -73,7 +69,7 @@ const getTokenContracts = async () => {
           per_page: coinGeckoAPI.maxPageSize,
           page: 1,
         }),
-      waitTimeMS,
+      REQUEST_TRY_AGAIN_TIME,
     });
 
     console.log("All markets loaded. Processing data...");
@@ -82,17 +78,17 @@ const getTokenContracts = async () => {
         const coin = allCoins.find((c) => c.id === item.id);
         const result = {
           ...item,
-          contractAddress: coin.platforms.ethereum,
+          marketCap: calculateMarketCap(item),
+          contractAddress: coin.platforms.ethereum.toLowerCase(),
         };
 
-        if (coinConditionCheck(result)) {
+        if (result.marketCap > MIN_COIN_MARKET_CAP) {
           return memo.concat(result);
         }
 
         return memo;
       }, [])
     );
-    fs.writeFile(__dirname + "/ethMarketsStatic.json", JSON.stringify(ethMarkets), "utf8", () => {});
     console.log(`All ${ethMarkets.length} markets, filtered by MCap or FDV (whatever exists), are ready to use.`);
 
     const ethMarketRequestChunks = chunk(ethMarkets, geckoTerminalAPI.maxRequestsPerTime);
@@ -105,13 +101,13 @@ const getTokenContracts = async () => {
         chunks: ethMarketRequestChunks,
         chunkName: "GeckoTerminalPool",
         chunkFetcher: (market) => geckoTerminalAPI.getSearch({ query: market.contractAddress }),
-        waitTimeMS,
+        REQUEST_TRY_AGAIN_TIME,
       }),
       chunkFetcher({
         chunks: ethMarketRequestChunks,
         chunkName: "DexScreenerPool",
         chunkFetcher: (market) => dexScreenerAPI.getTokenById(market.contractAddress),
-        waitTimeMS,
+        REQUEST_TRY_AGAIN_TIME,
       }),
     ]);
     const ethPools = {};
@@ -120,37 +116,54 @@ const getTokenContracts = async () => {
     poolsResponses[geckoTerminalPoolIndex].flat().forEach(({ response, contractAddress }) => {
       const pools = geckoTerminalAPI.poolsResolver(response.data) || [];
       const poolsFormatted = pools.reduce((memo, curr) => {
-        if (curr?.reserve_in_usd >= minLiquidityInPool) {
-          return memo.concat(curr.address.slice(0, ethAddressMaxLength));
+        if (curr?.reserve_in_usd >= MIN_LIQUIDITY_IN_POOL) {
+          return memo.concat({
+            address: curr.address.toLowerCase().slice(0, ETH_ADDRESS_MAX_LENGTH),
+            dex: curr.dex.identifier,
+            tokens: curr.tokens.reduce((memo, curr) => {
+              memo[curr.is_base_token ? 0 : 1] = curr.symbol;
+              return memo;
+            }, []),
+          });
         }
 
         return memo;
       }, []);
 
       if (poolsFormatted.length !== 0) {
-        ethPools[contractAddress] = poolsFormatted;
+        ethPools[contractAddress] = {
+          pools: poolsFormatted,
+          marketCap: ethMarkets.find((m) => m.contractAddress === contractAddress).marketCap,
+        };
       }
     });
     poolsResponses[dexScreenerPoolIndex].flat().forEach(({ response, contractAddress }) => {
-      const existingPools = ethPools[contractAddress];
+      const existingPools = ethPools[contractAddress]?.pools;
       const newPools = dexScreenerAPI.poolsResolver(response.data) || [];
       const newPoolsFormatted = newPools.reduce((memo, curr) => {
-        if (curr?.liquidity?.usd >= minLiquidityInPool) {
-          return memo.concat(curr.pairAddress.toLowerCase().slice(0, ethAddressMaxLength));
+        if (curr?.liquidity?.usd >= MIN_LIQUIDITY_IN_POOL) {
+          return memo.concat({
+            address: curr.pairAddress.toLowerCase().slice(0, ETH_ADDRESS_MAX_LENGTH),
+            dex: curr.dexId,
+            tokens: [curr.baseToken.symbol, curr.quoteToken.symbol],
+          });
         }
 
         return memo;
       }, []);
-      const pools = uniq(existingPools?.length ? existingPools.concat(newPoolsFormatted) : newPoolsFormatted);
+      const pools = uniqBy(
+        existingPools?.length ? existingPools.concat(newPoolsFormatted) : newPoolsFormatted,
+        "address"
+      );
 
       if (pools.length !== 0) {
-        ethPools[contractAddress] = pools;
+        ethPools[contractAddress] = { ...ethPools[contractAddress], pools };
       }
     });
 
     fs.writeFile(__dirname + "/ethPools.json", JSON.stringify(ethPools), "utf8", () => {});
     console.log(
-      `All ${Object.values(ethPools).flat().length} pools for ${
+      `All ${Object.values(ethPools).flatMap((item) => item.pools).length} pools for ${
         Object.keys(ethPools).length
       } tokens found and ready to use.`
     );

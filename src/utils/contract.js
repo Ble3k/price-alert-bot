@@ -22,23 +22,14 @@ export const extractEventsWithHashes = (ABI) =>
   }, {});
 
 export const decodeEventValues = ({ data, topics, event }) => {
-  const [_, ...args] = topics; // eslint-disable-line
-  const topicArgs = [];
-  const nonTopicArgs = [];
-
-  for (let inputIndex in event.inputs) {
-    if (event.inputs[inputIndex].indexed) {
-      topicArgs.push(event.inputs[inputIndex]);
-    } else {
-      nonTopicArgs.push(event.inputs[inputIndex]);
-    }
-  }
+  const [, ...args] = topics;
+  const topicArgs = event.inputs.filter((a) => a.indexed);
+  const nonTopicArgs = event.inputs.filter((a) => !a.indexed);
 
   const nonTopicArgsDecoded = defaultAbiCoder.decode(
     nonTopicArgs.map((a) => a.type),
     data
   );
-  const nonTopicArgsWithValue = nonTopicArgs.map((a, index) => ({ ...a, value: nonTopicArgsDecoded[index] }));
 
   return {
     ...event,
@@ -46,7 +37,7 @@ export const decodeEventValues = ({ data, topics, event }) => {
       ...input,
       value: input.indexed
         ? defaultAbiCoder.decode([input.type], args[topicArgs.findIndex((a) => a.name === input.name)])[0]
-        : nonTopicArgsWithValue.find((a) => a.name === input.name).value,
+        : nonTopicArgsDecoded[nonTopicArgs.findIndex((a) => a.name === input.name)],
     })),
   };
 };

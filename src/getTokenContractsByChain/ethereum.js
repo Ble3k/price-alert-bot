@@ -10,6 +10,7 @@ import {
   MIN_LIQUIDITY_IN_POOL,
   ETH_ADDRESS_MAX_LENGTH,
 } from "../config.js";
+console.log(REQUEST_TRY_AGAIN_TIME);
 
 import coinGeckoAPI from "../web2API/coingecko.js";
 import geckoTerminalAPI from "../web2API/geckoTerminal.js";

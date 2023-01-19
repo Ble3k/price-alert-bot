@@ -10,7 +10,6 @@ import {
   MIN_LIQUIDITY_IN_POOL,
   ETH_ADDRESS_MAX_LENGTH,
 } from "../config.js";
-console.log(REQUEST_TRY_AGAIN_TIME);
 
 import coinGeckoAPI from "../web2API/coingecko.js";
 import geckoTerminalAPI from "../web2API/geckoTerminal.js";
@@ -70,7 +69,7 @@ const getTokenContracts = async () => {
           per_page: coinGeckoAPI.maxPageSize,
           page: 1,
         }),
-      REQUEST_TRY_AGAIN_TIME,
+      waitTimeMS: REQUEST_TRY_AGAIN_TIME,
     });
 
     console.log("All markets loaded. Processing data...");
@@ -102,13 +101,13 @@ const getTokenContracts = async () => {
         chunks: ethMarketRequestChunks,
         chunkName: "GeckoTerminalPool",
         chunkFetcher: (market) => geckoTerminalAPI.getSearch({ query: market.contractAddress }),
-        REQUEST_TRY_AGAIN_TIME,
+        waitTimeMS: REQUEST_TRY_AGAIN_TIME,
       }),
       chunkFetcher({
         chunks: ethMarketRequestChunks,
         chunkName: "DexScreenerPool",
         chunkFetcher: (market) => dexScreenerAPI.getTokenById(market.contractAddress),
-        REQUEST_TRY_AGAIN_TIME,
+        waitTimeMS: REQUEST_TRY_AGAIN_TIME,
       }),
     ]);
     const ethPools = {};

@@ -13,6 +13,7 @@ const percentageChangeByMCap = (address) => {
     fs.readFileSync(path.join(__dirname, "..", "getTokenContractsByChain", "ethPools.json"), "utf8")
   );
   const marketCap = ethPools[address]?.marketCap; // in case we found a quote token, base of which is not in the list
+  inspect(`MarketCap for ${address}: ${marketCap} USD`);
 
   if (marketCap <= MARKET_CAP_PRICE_CHANGE_TRIGGER.LOW.MCAP) {
     return MARKET_CAP_PRICE_CHANGE_TRIGGER.LOW.PERCENT;
@@ -55,9 +56,9 @@ class Store {
     }, []);
 
     const maxPercentageBetweenSwaps = Math.max(...valueDiffs);
-    inspect(`Pool: ${address}, Base: ${baseAddress}, valueDiffs:`);
+    inspect(`Base: ${baseAddress}, valueDiffs:`);
     inspect(valueDiffs);
-    inspect(`Target P: ${percentageChangeByMCap(baseAddress)}`);
+    inspect(`Target P: ${percentageChangeByMCap(baseAddress)}%`);
     inspect("-----------------------------------------------------------");
 
     if (maxPercentageBetweenSwaps >= percentageChangeByMCap(baseAddress)) {

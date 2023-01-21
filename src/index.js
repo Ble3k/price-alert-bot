@@ -23,10 +23,12 @@ if (GLOBAL_AGENT_HTTP_PROXY) {
   bootstrap();
 }
 
-const date = new Date();
 // getTokenContracts();
 setInterval(getTokenContracts, FETCH_POOLS_PER_TIME);
-setInterval(() => inspect(`Ping! - ${date.toString()}`), LOCAL_PING_INTERVAL);
+setInterval(() => {
+  const date = new Date();
+  inspect(`Ping! - ${date.toString()}`);
+}, LOCAL_PING_INTERVAL);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

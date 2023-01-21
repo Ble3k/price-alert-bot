@@ -136,6 +136,7 @@ class UniV2Contract {
 
       return this.#discord.notify(message);
     } catch (e) {
+      inspect(e);
       inspect(`Failed to notify on ${this.#address}, trying again...`);
       await wait(WAIT_PER_REQUEST_TIME);
       return await this.doNotify(percentageChanged);

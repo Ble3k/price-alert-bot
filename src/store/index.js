@@ -58,10 +58,11 @@ class Store {
     const maxPercentageBetweenSwaps = Math.max(...valueDiffs);
     inspect(`Base: ${baseAddress}, valueDiffs:`);
     inspect(valueDiffs);
-    inspect(`Target P: ${percentageChangeByMCap(baseAddress)}%`);
+    const targetPercentage = percentageChangeByMCap(baseAddress);
+    inspect(`Target P: ${targetPercentage}%`);
     inspect("-----------------------------------------------------------");
 
-    if (maxPercentageBetweenSwaps >= percentageChangeByMCap(baseAddress)) {
+    if (maxPercentageBetweenSwaps >= targetPercentage) {
       this.prices[address] = undefined;
       notifyCallback(maxPercentageBetweenSwaps);
     }

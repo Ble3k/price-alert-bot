@@ -4,6 +4,7 @@ export const WAIT_PER_REQUEST_TIME = 3000;
 export const MIN_COIN_MARKET_CAP = 1000000;
 export const MIN_LIQUIDITY_IN_POOL = 300000;
 export const ETH_ADDRESS_MAX_LENGTH = 42;
+export const DISCORD_PING_INTERVAL = 1000 * 60 * 60;
 export const MARKET_CAP_PRICE_CHANGE_TRIGGER = {
   LOW: {
     MCAP: 5000000,

@@ -26,56 +26,56 @@ if (GLOBAL_AGENT_HTTP_PROXY) {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// const wssProvider = new ethers.providers.WebSocketProvider(`${WSS_PROVIDER_URL}/${RPC_API_KEY}`);
+const wssProvider = new ethers.providers.WebSocketProvider(`${WSS_PROVIDER_URL}/${RPC_API_KEY}`);
 const httpsProvider = new ethers.providers.JsonRpcProvider(`${HTTPS_PROVIDER_URL}/${RPC_API_KEY}`);
 const blockRequestMap = {};
 
 const store = new Store();
 const discord = new Discord({ token: DISCORD_API_KEY, channelId: DISCORD_CHANNEL_ID });
 
-getTokenContracts(httpsProvider);
-// setInterval(() => getTokenContracts(httpsProvider), FETCH_POOLS_PER_TIME);
+// getTokenContracts(httpsProvider);
+setInterval(() => getTokenContracts(httpsProvider), FETCH_POOLS_PER_TIME);
 setInterval(() => {
   const date = new Date();
   inspect(`Ping! - ${date.toString()}`);
 }, LOCAL_PING_INTERVAL);
 
-// wssProvider.on("block", async (blockNumber) => {
-//   if (!blockRequestMap[blockNumber]) {
-//     try {
-//       blockRequestMap[blockNumber] = true;
-//       const logs = await doRequestSafeRepeat({
-//         request: async () => {
-//           await wait(WAIT_PER_REQUEST_TIME); // wait before request
-//           return await wssProvider.getLogs({ fromBlock: blockNumber });
-//         },
-//         onFailedMessaged: `Failed on Block #${blockNumber}`,
-//         waitTimeMS: WAIT_PER_REQUEST_TIME, // wait after failed request to try again
-//       });
-//
-//       const ethPools = JSON.parse(fs.readFileSync(__dirname + "/getTokenContractsByChain/ethPools.json", "utf8"));
-//
-//       logs.forEach(({ address, data, topics }) => {
-//         const [eventSignature] = topics;
-//         const addressFormatted = address.toLowerCase();
-//         const poolInfo = ethPools.find((ep) => ep.address === addressFormatted);
-//
-//         if (UniV2Contract.events.Swap.hash === eventSignature && poolInfo) {
-//           new UniV2Contract({
-//             httpsProvider,
-//             discord,
-//             address: addressFormatted,
-//             ethPools,
-//             poolInfo,
-//             data,
-//             topics,
-//             event: UniV2Contract.events.Swap,
-//             store,
-//           });
-//         }
-//       });
-//     } catch (e) {
-//       inspect(e);
-//     }
-//   }
-// });
+wssProvider.on("block", async (blockNumber) => {
+  if (!blockRequestMap[blockNumber]) {
+    try {
+      blockRequestMap[blockNumber] = true;
+      const logs = await doRequestSafeRepeat({
+        request: async () => {
+          await wait(WAIT_PER_REQUEST_TIME); // wait before request
+          return await wssProvider.getLogs({ fromBlock: blockNumber });
+        },
+        onFailedMessaged: `Failed on Block #${blockNumber}`,
+        waitTimeMS: WAIT_PER_REQUEST_TIME, // wait after failed request to try again
+      });
+
+      const ethPools = JSON.parse(fs.readFileSync(__dirname + "/getTokenContractsByChain/ethPools.json", "utf8"));
+
+      logs.forEach(({ address, data, topics }) => {
+        const [eventSignature] = topics;
+        const addressFormatted = address.toLowerCase();
+        const poolInfo = ethPools.find((ep) => ep.address === addressFormatted);
+
+        if (UniV2Contract.events.Swap.hash === eventSignature && poolInfo) {
+          new UniV2Contract({
+            httpsProvider,
+            discord,
+            address: addressFormatted,
+            ethPools,
+            poolInfo,
+            data,
+            topics,
+            event: UniV2Contract.events.Swap,
+            store,
+          });
+        }
+      });
+    } catch (e) {
+      inspect(e);
+    }
+  }
+});

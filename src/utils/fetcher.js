@@ -3,7 +3,7 @@ import { v4 as uuidV4 } from "uuid";
 import wait from "./wait.js";
 import { MAX_REQUEST_REPEAT_TIME } from "../config.js";
 
-export const doRequestSafeRepeat = async ({ request, onFailedMessaged, waitTimeMS }) => {
+export const doRequestSafeRepeat = async ({ request, onFailedMessaged, unsafe, waitTimeMS }) => {
   const uniqId = uuidV4();
   const requestTryCount = {};
 
@@ -21,7 +21,7 @@ export const doRequestSafeRepeat = async ({ request, onFailedMessaged, waitTimeM
         inspect(e);
       }
 
-      if (requestTryCount[uniqId] < MAX_REQUEST_REPEAT_TIME) {
+      if (!unsafe && requestTryCount[uniqId] < MAX_REQUEST_REPEAT_TIME) {
         inspect(`Waiting for next ${waitTimeMS / 1000} seconds to try again...`);
         await wait(waitTimeMS);
         return await doRequest();

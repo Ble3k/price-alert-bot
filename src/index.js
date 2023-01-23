@@ -33,7 +33,7 @@ const blockRequestMap = {};
 const store = new Store();
 const discord = new Discord({ token: DISCORD_API_KEY, channelId: DISCORD_CHANNEL_ID });
 
-// getTokenContracts(httpsProvider);
+getTokenContracts(httpsProvider);
 setInterval(() => getTokenContracts(httpsProvider), FETCH_POOLS_PER_TIME);
 setInterval(() => {
   const date = new Date();
@@ -50,6 +50,7 @@ wssProvider.on("block", async (blockNumber) => {
           return await wssProvider.getLogs({ fromBlock: blockNumber });
         },
         onFailedMessaged: `Failed on Block #${blockNumber}`,
+        unsafe: true,
         waitTimeMS: WAIT_PER_REQUEST_TIME, // wait after failed request to try again
       });
 

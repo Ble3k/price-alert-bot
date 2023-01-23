@@ -10,7 +10,7 @@ import uniV2ABI from "./ABI.js";
 import { extractEventsWithHashes, decodeEventValues } from "../../utils/contract.js";
 import { doRequestSafeRepeat } from "../../utils/fetcher.js";
 import { wETH, wBTC } from "../../constants.js";
-import { WAIT_PER_REQUEST_TIME } from "../../config.js";
+import { WAIT_PER_REQUEST_TIME, MAX_PRICE_DIFF_VALUES_TO_STORE } from "../../config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -128,7 +128,9 @@ class UniV2Contract {
       }
       const message = `${eventName} in **${poolName}**\n\nPrice changed in ${this.#poolInfo.link} (${
         this.#poolInfo.dex
-      }) on ***${percentChanged.toFixed(2)}%*** for the last 10 minutes.\nCurrent price: ***${value.toFixed(
+      }) on ***${percentChanged.toFixed(
+        2
+      )}%*** for the last ${MAX_PRICE_DIFF_VALUES_TO_STORE} swaps.\nCurrent price: ***${value.toFixed(
         priceDecimals
       )} ${priceSymbol}***\n${poolsMessagePart}\n\n=============================================================`;
 

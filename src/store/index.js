@@ -15,10 +15,6 @@ const percentageChangeByMCap = ({ address, ethPools }) => {
     return MARKET_CAP_PRICE_CHANGE_TRIGGER.MEDIUM.PERCENT;
   }
 
-  if (marketCap <= MARKET_CAP_PRICE_CHANGE_TRIGGER.HIGH.MCAP) {
-    return MARKET_CAP_PRICE_CHANGE_TRIGGER.HIGH.PERCENT;
-  }
-
   return MARKET_CAP_PRICE_CHANGE_TRIGGER.DEFAULT.PERCENT;
 };
 

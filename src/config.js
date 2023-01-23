@@ -16,12 +16,8 @@ export const MARKET_CAP_PRICE_CHANGE_TRIGGER = {
     MCAP: 20000000,
     PERCENT: 15,
   },
-  HIGH: {
-    MCAP: 100000000,
-    PERCENT: 7.5,
-  },
   DEFAULT: {
-    PERCENT: 5,
+    PERCENT: 10,
   },
 };
-export const MAX_PRICE_DIFF_VALUES_TO_STORE = 100;
+export const MAX_PRICE_DIFF_VALUES_TO_STORE = 50;

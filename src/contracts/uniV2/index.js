@@ -104,7 +104,7 @@ class UniV2Contract {
     }
   };
 
-  doNotify = async ({ value, prevValue, percentChanged, eventName, ethStableCoins, ethPools }) => {
+  doNotify = async ({ value, percentChanged, eventName, ethStableCoins, ethPools }) => {
     const request = () => {
       const priceSymbol = this.#isPairInverted ? this.#base.symbol : this.#quote.symbol;
       const priceDecimals = this.#isPairInverted ? this.#base.decimals : this.#quote.decimals;
@@ -128,9 +128,7 @@ class UniV2Contract {
       }
       const message = `${eventName} in **${poolName}**\n\nPrice changed in ${this.#poolInfo.link} (${
         this.#poolInfo.dex
-      }) on ***${percentChanged.toFixed(2)}%*** for the last 10 minutes.\nPrevious price: ***${prevValue.toFixed(
-        priceDecimals
-      )} ${priceSymbol}***\nCurrent price: ***${value.toFixed(
+      }) on ***${percentChanged.toFixed(2)}%*** for the last 10 minutes.\nCurrent price: ***${value.toFixed(
         priceDecimals
       )} ${priceSymbol}***\n${poolsMessagePart}\n\n=============================================================`;
 

@@ -33,10 +33,10 @@ class Store {
       this.prices[address] = [...this.prices[address].slice(-MAX_PRICE_DIFF_VALUES_TO_STORE), value];
     }
 
-    this.checkPercentage({ address, baseAddress, ethPools, value, prevValue, notifyCallback });
+    this.checkPercentage({ address, baseAddress, ethPools, value, notifyCallback });
   };
 
-  checkPercentage = ({ address, baseAddress, ethPools, value, prevValue, notifyCallback }) => {
+  checkPercentage = ({ address, baseAddress, ethPools, value, notifyCallback }) => {
     let maxAbsValue = Number.NEGATIVE_INFINITY;
     let maxValue;
     const valueDiffs = this.prices[address].reduce((memo, curr) => {
@@ -62,7 +62,7 @@ class Store {
 
     if (Math.abs(maxValue) >= targetPercentage) {
       this.prices[address] = undefined;
-      notifyCallback({ value, prevValue, percentChanged: maxValue });
+      notifyCallback({ value, percentChanged: maxValue });
     }
   };
 }

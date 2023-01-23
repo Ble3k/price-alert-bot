@@ -1,4 +1,5 @@
-export const FETCH_POOLS_PER_TIME = 1000 * 3600 * 24;
+export const MAX_REQUEST_REPEAT_TIME = 3;
+export const FETCH_POOLS_PER_TIME = 1000 * 3600 * 23;
 export const REQUEST_TRY_AGAIN_TIME = 1000 * 60 + 1000;
 export const WAIT_PER_REQUEST_TIME = 3000;
 export const MIN_COIN_MARKET_CAP = 1000000;

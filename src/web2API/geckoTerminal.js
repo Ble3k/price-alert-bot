@@ -6,6 +6,7 @@ const request = generalRequest(geckoTerminalSource);
 
 class classAPI {
   maxRequestsPerTime = 80;
+  ethPoolsLink = (chain) => `https://www.geckoterminal.com/${chain}/pools`;
   poolsResolver = (data) => data.data.attributes.pools;
 
   getSearch = (params) =>

@@ -1,6 +1,6 @@
-import { Client } from "discord.js";
+import { Client, MessageFlags } from "discord.js";
 
-import wait from "../utils/wait.js";
+import { doRequestSafeRepeat } from "../utils/fetcher.js";
 import { WAIT_PER_REQUEST_TIME, DISCORD_PING_INTERVAL } from "../config.js";
 
 class Discord {
@@ -22,35 +22,34 @@ class Discord {
   }
 
   init = async () => {
-    try {
-      await this.#client.login(this.#token);
-      this.#channel = await this.#client.channels.fetch(this.#channelId);
-      this.#initializing = false;
-    } catch (e) {
-      inspect(e);
-      inspect("Failed to login in discord or fetch a channel, trying again...");
-      await wait(WAIT_PER_REQUEST_TIME);
-      await this.init();
-    }
+    await doRequestSafeRepeat({
+      request: async () => {
+        await this.#client.login(this.#token);
+        this.#channel = await this.#client.channels.fetch(this.#channelId);
+        this.#initializing = false;
+      },
+      onFailedMessaged: "Failed to login in discord or fetch a channel",
+      waitTimeMS: WAIT_PER_REQUEST_TIME,
+    });
   };
 
   notify = async (message) => {
-    try {
-      if (this.#initializing) {
-        throw "Still initializing...";
-      }
+    await doRequestSafeRepeat({
+      request: async () => {
+        if (this.#initializing) {
+          throw "Still initializing...";
+        }
 
-      await this.#channel.send(message);
-    } catch (e) {
-      inspect(e);
-      await wait(WAIT_PER_REQUEST_TIME);
-      return await this.notify(message);
-    }
+        await this.#channel.send({ content: message, embeds: null, flags: MessageFlags.SuppressEmbeds });
+      },
+      onFailedMessaged: `Failed to notify via discord\n\nMessage: ${message}`,
+      waitTimeMS: WAIT_PER_REQUEST_TIME,
+    });
   };
 
-  ping = () => {
+  ping = async () => {
     const date = new Date();
-    this.notify(`Ping!\nCurrent server time: *${date.toUTCString()} UTC*`);
+    await this.notify(`Ping!\nCurrent server time: *${date.toUTCString()} UTC*`);
   };
 }
 

@@ -6,6 +6,7 @@ const request = generalRequest(dexScreenerSource);
 
 class classAPI {
   maxRequestsPerTime = 250;
+  ethPoolsLink = (chain) => `https://dexscreener.com/${chain}`;
   poolsResolver = (data) => data.pairs;
 
   getTokenById = (contractAddress) =>

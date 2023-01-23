@@ -5,21 +5,25 @@ import ERC20ABI from "./ABI.js";
 class ERC20Contract {
   static ABI = ERC20ABI;
 
+  address;
   decimals;
   symbol;
 
   #httpsProvider;
-  #address;
+  #contract;
 
   constructor({ httpsProvider, address }) {
-    this.#address = address;
+    this.address = address;
     this.#httpsProvider = httpsProvider;
+    this.#contract = new ethers.Contract(this.address, ERC20Contract.ABI, this.#httpsProvider);
   }
 
-  getTokenInfo = async () => {
-    const contract = new ethers.Contract(this.#address, ERC20Contract.ABI, this.#httpsProvider);
-    this.decimals = await contract.decimals();
-    this.symbol = await contract.symbol();
+  getSymbol = async () => {
+    this.symbol = await this.#contract.symbol();
+  };
+
+  getDecimals = async () => {
+    this.decimals = await this.#contract.decimals();
   };
 }
 

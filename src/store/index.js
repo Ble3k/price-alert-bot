@@ -1,18 +1,10 @@
-import { calcPercentChanged } from "../utils/math.js";
-import fs from "fs";
-import path, { dirname } from "path";
-import { fileURLToPath } from "url";
-
 import { MARKET_CAP_PRICE_CHANGE_TRIGGER, MAX_PRICE_DIFF_VALUES_TO_STORE } from "../config.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const percentageChangeByMCap = ({ address, ethPools }) => {
+  const pool = ethPools.find((p) => p.tokens.some((t) => t.address === address));
+  const token = pool.tokens.find((t) => t.address === address);
+  const { marketCap } = token;
 
-const percentageChangeByMCap = (address) => {
-  const ethPools = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "..", "getTokenContractsByChain", "ethPools.json"), "utf8")
-  );
-  const marketCap = ethPools[address]?.marketCap; // in case we found a quote token, base of which is not in the list
   inspect(`MarketCap for ${address}: ${marketCap} USD`);
 
   if (marketCap <= MARKET_CAP_PRICE_CHANGE_TRIGGER.LOW.MCAP) {
@@ -33,7 +25,7 @@ const percentageChangeByMCap = (address) => {
 class Store {
   prices = {};
 
-  set = ({ address, baseAddress, value, prevValue, notifyCallback }) => {
+  set = ({ address, baseAddress, ethPools, value, prevValue, notifyCallback }) => {
     if (!this.prices[address]) {
       this.prices[address] = [prevValue, value];
     } else {
@@ -41,30 +33,36 @@ class Store {
       this.prices[address] = [...this.prices[address].slice(-MAX_PRICE_DIFF_VALUES_TO_STORE), value];
     }
 
-    this.checkPercentage({ address, baseAddress, value, notifyCallback });
+    this.checkPercentage({ address, baseAddress, ethPools, value, prevValue, notifyCallback });
   };
 
-  checkPercentage = ({ address, baseAddress, value, notifyCallback }) => {
+  checkPercentage = ({ address, baseAddress, ethPools, value, prevValue, notifyCallback }) => {
+    let maxAbsValue = Number.NEGATIVE_INFINITY;
+    let maxValue;
     const valueDiffs = this.prices[address].reduce((memo, curr) => {
-      const basePercentChanged = calcPercentChanged(curr.base, value.base);
-      const quotePercentChanged = calcPercentChanged(curr.quote, value.quote);
-      const pricePercentChanged = (Math.abs(basePercentChanged) + Math.abs(quotePercentChanged)).toFixed(5);
+      const pricePercentChanged = value.div(curr).times(100).minus(100).toNumber();
 
-      if (+pricePercentChanged !== 0) return memo.concat(pricePercentChanged);
+      if (pricePercentChanged !== 0) return memo.concat(pricePercentChanged);
 
       return memo;
     }, []);
 
-    const maxPercentageBetweenSwaps = Math.max(...valueDiffs);
+    for (let i = 0; i < valueDiffs.length; i++) {
+      if (Math.abs(valueDiffs[i]) > maxAbsValue) {
+        maxAbsValue = Math.abs(valueDiffs[i]);
+        maxValue = valueDiffs[i];
+      }
+    }
+
     inspect(`Base: ${baseAddress}, valueDiffs:`);
     inspect(valueDiffs);
-    const targetPercentage = percentageChangeByMCap(baseAddress);
+    const targetPercentage = percentageChangeByMCap({ address: baseAddress, ethPools });
     inspect(`Target P: ${targetPercentage}%`);
     inspect("-----------------------------------------------------------");
 
-    if (maxPercentageBetweenSwaps >= targetPercentage) {
+    if (Math.abs(maxValue) >= targetPercentage) {
       this.prices[address] = undefined;
-      notifyCallback(maxPercentageBetweenSwaps);
+      notifyCallback({ value, prevValue, percentChanged: maxValue });
     }
   };
 }

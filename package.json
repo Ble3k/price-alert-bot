@@ -18,6 +18,7 @@
     "ethers": "^5.7.2",
     "global-agent": "^3.0.0",
     "lodash": "^4.17.21",
-    "prettier": "^2.8.1"
+    "prettier": "^2.8.1",
+    "uuid": "^9.0.0"
   }
 }

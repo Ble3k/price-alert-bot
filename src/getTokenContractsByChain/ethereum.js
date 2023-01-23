@@ -3,7 +3,7 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 import lodash from "lodash";
 
-import chunkFetcher from "../utils/chunkFetcher.js";
+import { chunkFetcher } from "../utils/fetcher.js";
 import {
   REQUEST_TRY_AGAIN_TIME,
   MIN_COIN_MARKET_CAP,
@@ -15,7 +15,9 @@ import coinGeckoAPI from "../web2API/coingecko.js";
 import geckoTerminalAPI from "../web2API/geckoTerminal.js";
 import dexScreenerAPI from "../web2API/dexScreener.js";
 
-const { chunk, uniqBy } = lodash;
+import ERC20Contract from "../contracts/erc20/index.js";
+
+const { chunk } = lodash;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,12 +44,34 @@ const calculateMarketCap = (coin) => {
   return false;
 };
 
-const getTokenContracts = async () => {
+const getTokenContracts = async (httpsProvider) => {
   try {
-    console.log("Loading all coins...");
+    inspect("Loading all coins...");
     const { data: allCoins } = await coinGeckoAPI.getCoins({ include_platform: true });
+    const { data: allStableCoins } = await coinGeckoAPI.getMarkets({
+      vs_currency: "usd",
+      category: "stablecoins",
+      order: "id_asc",
+      per_page: coinGeckoAPI.maxPageSize,
+      page: 1,
+    });
+    const ethStableCoins = allStableCoins.reduce((memo, curr) => {
+      const coin = allCoins.find((c) => c.id === curr.id);
 
-    console.log("All coins loaded. Processing data...");
+      if (coin.platforms.ethereum) {
+        return memo.concat({
+          name: curr.name,
+          symbol: curr.symbol.toUpperCase(),
+          address: coin.platforms.ethereum.toLowerCase(),
+          marketCap: calculateMarketCap(curr),
+        });
+      }
+
+      return memo;
+    }, []);
+    fs.writeFile(__dirname + "/ethStableCoins.json", JSON.stringify(ethStableCoins), "utf8", () => {});
+
+    inspect("All coins loaded. Processing data...");
     const ethereumCoinIds = allCoins.reduce(
       (memo, curr) => (curr.platforms.ethereum ? memo.concat(curr.id) : memo),
       []
@@ -57,7 +81,7 @@ const getTokenContracts = async () => {
     );
     const ethereumCoinIdRequestChunks = chunk(ethereumCoinIdChunks, coinGeckoAPI.maxRequestsPerTime);
 
-    console.log("Loading markets...");
+    inspect("Loading markets...");
     const marketsResponse = await chunkFetcher({
       chunks: ethereumCoinIdRequestChunks,
       chunkName: "Market",
@@ -72,7 +96,7 @@ const getTokenContracts = async () => {
       waitTimeMS: REQUEST_TRY_AGAIN_TIME,
     });
 
-    console.log("All markets loaded. Processing data...");
+    inspect("All markets loaded. Processing data...");
     const ethMarkets = marketsResponse.flatMap(({ data }) =>
       data.reduce((memo, item) => {
         const coin = allCoins.find((c) => c.id === item.id);
@@ -89,86 +113,150 @@ const getTokenContracts = async () => {
         return memo;
       }, [])
     );
-    console.log(`All ${ethMarkets.length} markets, filtered by MCap or FDV (whatever exists), are ready to use.`);
+    inspect(`All ${ethMarkets.length} markets, filtered by MCap or FDV (whatever exists), are ready to use.`);
 
     const ethMarketRequestChunks = chunk(ethMarkets, geckoTerminalAPI.maxRequestsPerTime);
-    const geckoTerminalPoolIndex = 0;
-    const dexScreenerPoolIndex = 1;
+    const dexScreenerPoolIndex = 0;
+    const geckoTerminalPoolIndex = 1;
 
-    console.log("Loading pools...");
+    inspect("Loading pools...");
     const poolsResponses = await Promise.all([
-      chunkFetcher({
-        chunks: ethMarketRequestChunks,
-        chunkName: "GeckoTerminalPool",
-        chunkFetcher: (market) => geckoTerminalAPI.getSearch({ query: market.contractAddress }),
-        waitTimeMS: REQUEST_TRY_AGAIN_TIME,
-      }),
       chunkFetcher({
         chunks: ethMarketRequestChunks,
         chunkName: "DexScreenerPool",
         chunkFetcher: (market) => dexScreenerAPI.getTokenById(market.contractAddress),
         waitTimeMS: REQUEST_TRY_AGAIN_TIME,
       }),
+      chunkFetcher({
+        chunks: ethMarketRequestChunks,
+        chunkName: "GeckoTerminalPool",
+        chunkFetcher: (market) => geckoTerminalAPI.getSearch({ query: market.contractAddress }),
+        waitTimeMS: REQUEST_TRY_AGAIN_TIME,
+      }),
     ]);
-    const ethPools = {};
+    const ethPools = [];
 
-    console.log("All pools loaded. Processing data...");
-    poolsResponses[geckoTerminalPoolIndex].flat().forEach(({ response, contractAddress }) => {
-      const pools = geckoTerminalAPI.poolsResolver(response.data) || [];
-      const poolsFormatted = pools.reduce((memo, curr) => {
-        if (curr?.reserve_in_usd >= MIN_LIQUIDITY_IN_POOL) {
-          return memo.concat({
-            address: curr.address.toLowerCase().slice(0, ETH_ADDRESS_MAX_LENGTH),
-            dex: curr.dex.identifier,
-            tokens: curr.tokens.reduce((memo, curr) => {
-              memo[curr.is_base_token ? 0 : 1] = curr.symbol;
-              return memo;
-            }, []),
+    inspect("All pools loaded. Processing data...");
+    const dexScreenerResponse = poolsResponses[dexScreenerPoolIndex].flat();
+    let dsResponseIndex = 0;
+    for (const { response } of dexScreenerResponse) {
+      dsResponseIndex++;
+      const dsPools = (dexScreenerAPI.poolsResolver(response.data) || []).filter((p) => p.chainId === "ethereum");
+
+      let dsPoolIndex = 0;
+      for (const pool of dsPools) {
+        dsPoolIndex++;
+        const dsPoolAddress = pool.pairAddress.toLowerCase().slice(0, ETH_ADDRESS_MAX_LENGTH);
+        const { baseToken, quoteToken } = pool;
+        const baseInfo = ethMarkets.find((m) => m.contractAddress === baseToken.address.toLowerCase());
+        const quoteInfo = ethMarkets.find((m) => m.contractAddress === quoteToken.address.toLowerCase());
+
+        if (
+          !ethPools.some((ep) => ep.address === dsPoolAddress) &&
+          baseInfo &&
+          quoteInfo &&
+          pool?.liquidity?.usd >= MIN_LIQUIDITY_IN_POOL
+        ) {
+          inspect(
+            `Processing: ${dsPoolAddress} DS pool ${dsPoolIndex}/${dsPools.length} of ${dsResponseIndex}/${dexScreenerResponse.length}`
+          );
+          const baseContract = new ERC20Contract({ httpsProvider, address: baseToken.address });
+          const quoteContract = new ERC20Contract({ httpsProvider, address: quoteToken.address });
+          await baseContract.getDecimals();
+          await quoteContract.getDecimals();
+
+          ethPools.push({
+            address: dsPoolAddress,
+            link: `${dexScreenerAPI.ethPoolsLink(pool.chainId)}/${pool.pairAddress}`,
+            dex: pool.dexId,
+            tokens: [
+              {
+                name: baseToken.name,
+                symbol: baseToken.symbol.toUpperCase(),
+                address: baseToken.address.toLowerCase(),
+                marketCap: baseInfo?.marketCap,
+                decimals: baseContract.decimals,
+              },
+              {
+                name: quoteToken.name,
+                symbol: quoteToken.symbol.toUpperCase(),
+                address: quoteToken.address.toLowerCase(),
+                marketCap: quoteInfo?.marketCap,
+                decimals: quoteContract.decimals,
+              },
+            ],
           });
         }
-
-        return memo;
-      }, []);
-
-      if (poolsFormatted.length !== 0) {
-        ethPools[contractAddress] = {
-          pools: poolsFormatted,
-          marketCap: ethMarkets.find((m) => m.contractAddress === contractAddress).marketCap,
-        };
       }
-    });
-    poolsResponses[dexScreenerPoolIndex].flat().forEach(({ response, contractAddress }) => {
-      const existingPools = ethPools[contractAddress]?.pools;
-      const newPools = dexScreenerAPI.poolsResolver(response.data) || [];
-      const newPoolsFormatted = newPools.reduce((memo, curr) => {
-        if (curr?.liquidity?.usd >= MIN_LIQUIDITY_IN_POOL) {
-          return memo.concat({
-            address: curr.pairAddress.toLowerCase().slice(0, ETH_ADDRESS_MAX_LENGTH),
-            dex: curr.dexId,
-            tokens: [curr.baseToken.symbol, curr.quoteToken.symbol],
-          });
-        }
+    }
 
-        return memo;
-      }, []);
-      const pools = uniqBy(
-        existingPools?.length ? existingPools.concat(newPoolsFormatted) : newPoolsFormatted,
-        "address"
+    const geckoTerminalResponse = poolsResponses[geckoTerminalPoolIndex].flat();
+    let geckoTerminalResponseIndex = 0;
+    for (const { response } of geckoTerminalResponse) {
+      geckoTerminalResponseIndex++;
+      const gtPools = (geckoTerminalAPI.poolsResolver(response.data) || []).filter(
+        (p) => p.network.identifier === "eth"
       );
 
-      if (pools.length !== 0) {
-        ethPools[contractAddress] = { ...ethPools[contractAddress], pools };
+      let gtPoolIndex = 0;
+      for (const pool of gtPools) {
+        gtPoolIndex++;
+        const gtPoolAddress = pool.address.toLowerCase().slice(0, ETH_ADDRESS_MAX_LENGTH);
+        const baseToken = pool.tokens.find((t) => t.is_base_token);
+        const quoteTokens = pool.tokens.filter((t) => !t.is_base_token);
+        const baseTokenInfo = ethMarkets.find((m) => m.symbol.toLowerCase() === baseToken.symbol.toLowerCase());
+        const quoteTokensInfo = ethMarkets.filter(
+          (m) => !!quoteTokens.find((qt) => m.symbol.toLowerCase() === qt.symbol.toLowerCase())
+        );
+
+        if (
+          !ethPools.some((ep) => ep.address === gtPoolAddress) &&
+          baseTokenInfo &&
+          quoteTokensInfo.length &&
+          pool?.reserve_in_usd >= MIN_LIQUIDITY_IN_POOL
+        ) {
+          inspect(
+            `Processing: ${gtPoolAddress} GT pool ${gtPoolIndex}/${gtPools.length} of ${geckoTerminalResponseIndex}/${geckoTerminalResponse.length}`
+          );
+          const baseContract = new ERC20Contract({
+            httpsProvider,
+            address: baseTokenInfo.contractAddress,
+          });
+          const quoteContracts = quoteTokensInfo.map(
+            (qt) => new ERC20Contract({ httpsProvider, address: qt.contractAddress })
+          );
+          await baseContract.getDecimals();
+          await Promise.all(quoteContracts.map((qc) => qc.getDecimals()));
+
+          ethPools.push({
+            address: gtPoolAddress,
+            link: `${geckoTerminalAPI.ethPoolsLink(pool.network.identifier)}/${pool.address}`,
+            dex: pool.dex.identifier,
+            tokens: [
+              {
+                name: baseTokenInfo.name,
+                symbol: baseTokenInfo.symbol.toUpperCase(),
+                address: baseTokenInfo.contractAddress,
+                marketCap: baseTokenInfo.marketCap,
+                decimals: baseContract.decimals,
+              },
+              ...quoteTokensInfo.map((qt) => ({
+                name: qt.name,
+                symbol: qt.symbol.toUpperCase(),
+                address: qt.contractAddress,
+                marketCap: qt.marketCap,
+                decimals: quoteContracts.find((qc) => qc.address === qt.contractAddress).decimals,
+              })),
+            ],
+          });
+        }
       }
-    });
+    }
 
     fs.writeFile(__dirname + "/ethPools.json", JSON.stringify(ethPools), "utf8", () => {});
-    console.log(
-      `All ${Object.values(ethPools).flatMap((item) => item.pools).length} pools for ${
-        Object.keys(ethPools).length
-      } tokens found and ready to use.`
-    );
+    inspect(`All ${ethPools.length} pools found and ready to use.`);
   } catch (e) {
-    console.log(e);
+    inspect(e);
   }
 };
 

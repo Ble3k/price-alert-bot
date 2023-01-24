@@ -61,7 +61,7 @@ class UniV2Contract {
       const isWBTCBase = this.#base.address === wBTC;
       const isStableBase = ethStableCoins.some((sc) => sc.address === this.#base.address);
       const isStableQuote = ethStableCoins.some((sc) => sc.address === this.#quote.address);
-      this.#isPairInverted = ((isWETHBase || isWBTCBase) && !isStableQuote) || (isStableBase && !isStableBase);
+      this.#isPairInverted = ((isWETHBase || isWBTCBase) && !isStableQuote) || (isStableBase && !isStableQuote);
       const currentBaseAmount = new Big(formatUnits(baseAmount, this.#base.decimals));
       const currentQuoteAmount = new Big(formatUnits(quoteAmount, this.#quote.decimals));
       const currentPrice = this.#isPairInverted

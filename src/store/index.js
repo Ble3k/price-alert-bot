@@ -51,7 +51,7 @@ class Store {
     const targetPercentage = percentageChangeByMCap({ address: baseAddress, ethPools });
 
     if (Math.abs(maxValue) >= targetPercentage) {
-      this.prices[address] = undefined;
+      delete this.prices[address];
       notifyCallback({ value, percentChanged: maxValue });
     }
   };

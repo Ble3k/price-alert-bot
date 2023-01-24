@@ -5,14 +5,7 @@ import { ethers } from "ethers";
 import { bootstrap } from "global-agent";
 
 import getTokenContracts from "./getTokenContractsByChain/ethereum.js";
-import {
-  RPC_API_KEY,
-  HTTPS_PROVIDER_URL,
-  WSS_PROVIDER_URL,
-  GLOBAL_AGENT_HTTP_PROXY,
-  DISCORD_API_KEY,
-  DISCORD_CHANNEL_ID,
-} from "./init.js";
+import { RPC_API_KEY, GLOBAL_AGENT_HTTP_PROXY, DISCORD_API_KEY, DISCORD_CHANNEL_ID } from "./init.js";
 import wait from "./utils/wait.js";
 import { doRequestSafeRepeat } from "./utils/fetcher.js";
 import { FETCH_POOLS_PER_TIME, WAIT_PER_REQUEST_TIME, LOCAL_PING_INTERVAL } from "./config.js";
@@ -26,21 +19,20 @@ if (GLOBAL_AGENT_HTTP_PROXY) {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const wssProvider = new ethers.providers.WebSocketProvider(`${WSS_PROVIDER_URL}/${RPC_API_KEY}`);
-const httpsProvider = new ethers.providers.JsonRpcProvider(`${HTTPS_PROVIDER_URL}/${RPC_API_KEY}`);
+const provider = new ethers.providers.AnkrProvider({ name: "homestead", chainId: 1 }, RPC_API_KEY);
 let isBlockProcessing = false;
 
 const store = new Store();
 const discord = new Discord({ token: DISCORD_API_KEY, channelId: DISCORD_CHANNEL_ID });
 
-// getTokenContracts(httpsProvider);
-setInterval(() => getTokenContracts(httpsProvider), FETCH_POOLS_PER_TIME);
+// getTokenContracts(provider);
+setInterval(() => getTokenContracts(provider), FETCH_POOLS_PER_TIME);
 setInterval(() => {
   const date = new Date();
   inspect(`Ping! - ${date.toString()}`);
 }, LOCAL_PING_INTERVAL);
 
-wssProvider.on("block", async (blockNumber) => {
+provider.on("block", async (blockNumber) => {
   inspect(`Processing a block: #${blockNumber}. In progress: ${isBlockProcessing}`);
   if (!isBlockProcessing) {
     try {
@@ -49,7 +41,7 @@ wssProvider.on("block", async (blockNumber) => {
       const logs = await doRequestSafeRepeat({
         request: async () => {
           await wait(WAIT_PER_REQUEST_TIME); // wait before request
-          return await wssProvider.getLogs({ fromBlock: blockNumber });
+          return await provider.getLogs({ fromBlock: blockNumber });
         },
         onFailedMessaged: `Failed on Block #${blockNumber}`,
         unsafe: true,
@@ -65,7 +57,7 @@ wssProvider.on("block", async (blockNumber) => {
 
         if (UniV2Contract.events.Swap.hash === eventSignature && poolInfo) {
           new UniV2Contract({
-            httpsProvider,
+            httpsProvider: provider,
             discord,
             address: addressFormatted,
             ethPools,

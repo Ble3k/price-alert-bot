@@ -86,7 +86,7 @@ class UniV2Contract {
         if (!notifyRequestMap[this.#address]) {
           notifyRequestMap[this.#address] = true;
           await this.doNotify({ value, prevValue, percentChanged, eventName, ethStableCoins, ethPools });
-          notifyRequestMap[this.#address] = false;
+          delete notifyRequestMap[this.#address];
         }
       };
 

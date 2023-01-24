@@ -50,11 +50,11 @@ class Store {
       }
     }
 
-    inspect(`Base: ${baseAddress}, valueDiffs:`);
-    inspect(valueDiffs);
+    // inspect(`Base: ${baseAddress}, valueDiffs:`);
+    // inspect(valueDiffs);
     const targetPercentage = percentageChangeByMCap({ address: baseAddress, ethPools });
-    inspect(`Target P: ${targetPercentage}%`);
-    inspect("-----------------------------------------------------------");
+    // inspect(`Target P: ${targetPercentage}%`);
+    // inspect("-----------------------------------------------------------");
 
     if (Math.abs(maxValue) >= targetPercentage) {
       this.prices[address] = undefined;

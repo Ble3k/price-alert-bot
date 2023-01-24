@@ -28,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const wssProvider = new ethers.providers.WebSocketProvider(`${WSS_PROVIDER_URL}/${RPC_API_KEY}`);
 const httpsProvider = new ethers.providers.JsonRpcProvider(`${HTTPS_PROVIDER_URL}/${RPC_API_KEY}`);
-const blockRequestMap = {};
+let isBlockProcessing = false;
 
 const store = new Store();
 const discord = new Discord({ token: DISCORD_API_KEY, channelId: DISCORD_CHANNEL_ID });
@@ -41,10 +41,11 @@ setInterval(() => {
 }, LOCAL_PING_INTERVAL);
 
 wssProvider.on("block", async (blockNumber) => {
-  inspect(`Processing a block: #${blockNumber}`);
-  if (!blockRequestMap[blockNumber]) {
+  inspect(`Processing a block: #${blockNumber}. In progress: ${isBlockProcessing}`);
+  if (!isBlockProcessing) {
     try {
-      blockRequestMap[blockNumber] = true;
+      inspect(blockNumber);
+      isBlockProcessing = true;
       const logs = await doRequestSafeRepeat({
         request: async () => {
           await wait(WAIT_PER_REQUEST_TIME); // wait before request
@@ -78,6 +79,8 @@ wssProvider.on("block", async (blockNumber) => {
       });
     } catch (e) {
       inspect(e);
+    } finally {
+      isBlockProcessing = false;
     }
   }
 });

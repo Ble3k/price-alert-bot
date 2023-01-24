@@ -33,7 +33,7 @@ const blockRequestMap = {};
 const store = new Store();
 const discord = new Discord({ token: DISCORD_API_KEY, channelId: DISCORD_CHANNEL_ID });
 
-getTokenContracts(httpsProvider);
+// getTokenContracts(httpsProvider);
 setInterval(() => getTokenContracts(httpsProvider), FETCH_POOLS_PER_TIME);
 setInterval(() => {
   const date = new Date();
@@ -41,6 +41,7 @@ setInterval(() => {
 }, LOCAL_PING_INTERVAL);
 
 wssProvider.on("block", async (blockNumber) => {
+  inspect(`Processing a block: #${blockNumber}`);
   if (!blockRequestMap[blockNumber]) {
     try {
       blockRequestMap[blockNumber] = true;

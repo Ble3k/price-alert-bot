@@ -23,7 +23,6 @@ class Store {
     if (!this.prices[address]) {
       this.prices[address] = [prevValue, value];
     } else {
-      // Only keep the last 100 prices
       this.prices[address] = [...this.prices[address].slice(-MAX_PRICE_DIFF_VALUES_TO_STORE), value];
     }
 
@@ -48,7 +47,11 @@ class Store {
       }
     }
 
+    inspect(`Base: ${baseAddress}, valueDiffs:`);
+    inspect(valueDiffs);
     const targetPercentage = percentageChangeByMCap({ address: baseAddress, ethPools });
+    inspect(`Target P: ${targetPercentage}%`);
+    inspect("-----------------------------------------------------------");
 
     if (Math.abs(maxValue) >= targetPercentage) {
       delete this.prices[address];
